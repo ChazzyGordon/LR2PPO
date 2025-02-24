@@ -1,0 +1,187 @@
+[10:01:05,310 INFO] Batch size: 64
+[10:01:05,310 INFO] The number of training instances: 68260
+[10:01:05,311 INFO] Start training.
+[10:02:57,224 INFO] Epoch id: 1, Training steps: 100, Avg loss: 0.923, Acc: 0.582
+[10:02:57,225 INFO] Val set evaluation.
+[10:02:57,225 INFO] Evaluating...
+[10:05:28,008 INFO] Val Acc: 0.648238436436989
+[10:05:34,661 INFO] Best Acc until now!
+
+[10:05:34,661 INFO] Best Acc: 0.648238436436989
+[10:06:54,282 INFO] Epoch id: 1, Training steps: 200, Avg loss: 0.755, Acc: 0.663
+[10:06:54,283 INFO] Val set evaluation.
+[10:06:54,283 INFO] Evaluating...
+[10:09:25,532 INFO] Val Acc: 0.6979123320378048
+[10:09:31,467 INFO] Best Acc until now!
+
+[10:09:31,468 INFO] Best Acc: 0.6979123320378048
+[10:12:14,804 INFO] Epoch id: 2, Training steps: 100, Avg loss: 0.651, Acc: 0.718
+[10:12:14,804 INFO] Val set evaluation.
+[10:12:14,805 INFO] Evaluating...
+[10:14:46,454 INFO] Val Acc: 0.7358344670752405
+[10:14:52,098 INFO] Best Acc until now!
+
+[10:14:52,098 INFO] Best Acc: 0.7358344670752405
+[10:16:11,450 INFO] Epoch id: 2, Training steps: 200, Avg loss: 0.602, Acc: 0.742
+[10:16:11,451 INFO] Val set evaluation.
+[10:16:11,451 INFO] Evaluating...
+[10:18:41,822 INFO] Val Acc: 0.7454095311567817
+[10:18:47,524 INFO] Best Acc until now!
+
+[10:18:47,524 INFO] Best Acc: 0.7454095311567817
+[10:21:31,499 INFO] Epoch id: 3, Training steps: 100, Avg loss: 0.563, Acc: 0.761
+[10:21:31,500 INFO] Val set evaluation.
+[10:21:31,500 INFO] Evaluating...
+[10:24:01,493 INFO] Val Acc: 0.7524497841445493
+[10:24:07,197 INFO] Best Acc until now!
+
+[10:24:07,197 INFO] Best Acc: 0.7524497841445493
+[10:25:26,581 INFO] Epoch id: 3, Training steps: 200, Avg loss: 0.543, Acc: 0.773
+[10:25:26,582 INFO] Val set evaluation.
+[10:25:26,583 INFO] Evaluating...
+[10:27:56,603 INFO] Val Acc: 0.7576714549266117
+[10:28:02,227 INFO] Best Acc until now!
+
+[10:28:02,227 INFO] Best Acc: 0.7576714549266117
+[10:30:44,941 INFO] Epoch id: 4, Training steps: 100, Avg loss: 0.532, Acc: 0.780
+[10:30:44,942 INFO] Val set evaluation.
+[10:30:44,942 INFO] Evaluating...
+[10:33:17,027 INFO] Val Acc: 0.763840429212006
+[10:33:22,608 INFO] Best Acc until now!
+
+[10:33:22,608 INFO] Best Acc: 0.763840429212006
+[10:34:41,743 INFO] Epoch id: 4, Training steps: 200, Avg loss: 0.523, Acc: 0.781
+[10:34:41,744 INFO] Val set evaluation.
+[10:34:41,744 INFO] Evaluating...
+[10:37:13,016 INFO] Val Acc: 0.7632472394217907
+[10:37:13,031 INFO] Best Acc: 0.763840429212006
+[10:39:55,453 INFO] Epoch id: 5, Training steps: 100, Avg loss: 0.486, Acc: 0.795
+[10:39:55,454 INFO] Val set evaluation.
+[10:39:55,454 INFO] Evaluating...
+[10:42:23,645 INFO] Val Acc: 0.7663032170752404
+[10:42:29,299 INFO] Best Acc until now!
+
+[10:42:29,299 INFO] Best Acc: 0.7663032170752404
+[10:43:48,226 INFO] Epoch id: 5, Training steps: 200, Avg loss: 0.489, Acc: 0.791
+[10:43:48,227 INFO] Val set evaluation.
+[10:43:48,227 INFO] Evaluating...
+[10:46:18,133 INFO] Val Acc: 0.7667683658465533
+[10:46:23,817 INFO] Best Acc until now!
+
+[10:46:23,818 INFO] Best Acc: 0.7667683658465533
+[10:49:05,955 INFO] Epoch id: 6, Training steps: 100, Avg loss: 0.470, Acc: 0.793
+[10:49:05,956 INFO] Val set evaluation.
+[10:49:05,957 INFO] Evaluating...
+[10:51:37,762 INFO] Val Acc: 0.7657580426041509
+[10:51:37,786 INFO] Best Acc: 0.7667683658465533
+[10:52:56,894 INFO] Epoch id: 6, Training steps: 200, Avg loss: 0.468, Acc: 0.790
+[10:52:56,895 INFO] Val set evaluation.
+[10:52:56,895 INFO] Evaluating...
+[10:55:26,900 INFO] Val Acc: 0.7645426538628591
+[10:55:26,915 INFO] Best Acc: 0.7667683658465533
+[10:58:09,650 INFO] Epoch id: 7, Training steps: 100, Avg loss: 0.469, Acc: 0.784
+[10:58:09,650 INFO] Val set evaluation.
+[10:58:09,651 INFO] Evaluating...
+[11:00:38,132 INFO] Val Acc: 0.7637944140904386
+[11:00:38,155 INFO] Best Acc: 0.7667683658465533
+[11:01:57,513 INFO] Epoch id: 7, Training steps: 200, Avg loss: 0.464, Acc: 0.785
+[11:01:57,514 INFO] Val set evaluation.
+[11:01:57,514 INFO] Evaluating...
+[11:04:26,708 INFO] Val Acc: 0.7623529529907334
+[11:04:26,725 INFO] Best Acc: 0.7667683658465533
+[11:07:08,555 INFO] Epoch id: 8, Training steps: 100, Avg loss: 0.459, Acc: 0.787
+[11:07:08,556 INFO] Val set evaluation.
+[11:07:08,556 INFO] Evaluating...
+[11:09:40,092 INFO] Val Acc: 0.7675296095055594
+[11:09:45,760 INFO] Best Acc until now!
+
+[11:09:45,760 INFO] Best Acc: 0.7675296095055594
+[11:11:04,845 INFO] Epoch id: 8, Training steps: 200, Avg loss: 0.457, Acc: 0.784
+[11:11:04,845 INFO] Val set evaluation.
+[11:11:04,846 INFO] Evaluating...
+[11:13:34,175 INFO] Val Acc: 0.7688930457746479
+[11:13:39,842 INFO] Best Acc until now!
+
+[11:13:39,842 INFO] Best Acc: 0.7688930457746479
+[11:16:23,491 INFO] Epoch id: 9, Training steps: 100, Avg loss: 0.441, Acc: 0.792
+[11:16:23,492 INFO] Val set evaluation.
+[11:16:23,492 INFO] Evaluating...
+[11:18:52,643 INFO] Val Acc: 0.769997399289843
+[11:18:58,259 INFO] Best Acc until now!
+
+[11:18:58,260 INFO] Best Acc: 0.769997399289843
+[11:20:17,453 INFO] Epoch id: 9, Training steps: 200, Avg loss: 0.442, Acc: 0.791
+[11:20:17,454 INFO] Val set evaluation.
+[11:20:17,454 INFO] Evaluating...
+[11:22:51,059 INFO] Val Acc: 0.7657030249985171
+[11:22:51,095 INFO] Best Acc: 0.769997399289843
+[11:25:32,982 INFO] Epoch id: 10, Training steps: 100, Avg loss: 0.435, Acc: 0.794
+[11:25:32,983 INFO] Val set evaluation.
+[11:25:32,983 INFO] Evaluating...
+[11:28:01,060 INFO] Val Acc: 0.7725022007042254
+[11:28:06,653 INFO] Best Acc until now!
+
+[11:28:06,653 INFO] Best Acc: 0.7725022007042254
+[11:29:25,564 INFO] Epoch id: 10, Training steps: 200, Avg loss: 0.431, Acc: 0.796
+[11:29:25,565 INFO] Val set evaluation.
+[11:29:25,565 INFO] Evaluating...
+[11:31:58,544 INFO] Val Acc: 0.7707836507071911
+[11:31:58,565 INFO] Best Acc: 0.7725022007042254
+[11:36:34,105 INFO] Epoch id: 11, Training steps: 100, Avg loss: 0.431, Acc: 0.795
+[11:36:34,106 INFO] Val set evaluation.
+[11:36:34,106 INFO] Evaluating...
+[11:39:05,946 INFO] Val Acc: 0.757856514084507
+[11:39:05,959 INFO] Best Acc: 0.7725022007042254
+[11:40:24,931 INFO] Epoch id: 11, Training steps: 200, Avg loss: 0.426, Acc: 0.799
+[11:40:24,931 INFO] Val set evaluation.
+[11:40:24,931 INFO] Evaluating...
+[11:42:54,206 INFO] Val Acc: 0.7737786091549296
+[11:42:59,888 INFO] Best Acc until now!
+
+[11:42:59,888 INFO] Best Acc: 0.7737786091549296
+[11:45:43,931 INFO] Epoch id: 12, Training steps: 100, Avg loss: 0.418, Acc: 0.801
+[11:45:43,932 INFO] Val set evaluation.
+[11:45:43,932 INFO] Evaluating...
+[11:48:15,468 INFO] Val Acc: 0.7748629563291308
+[11:48:21,169 INFO] Best Acc until now!
+
+[11:48:21,169 INFO] Best Acc: 0.7748629563291308
+[11:49:40,442 INFO] Epoch id: 12, Training steps: 200, Avg loss: 0.412, Acc: 0.804
+[11:49:40,442 INFO] Val set evaluation.
+[11:49:40,443 INFO] Evaluating...
+[11:52:12,102 INFO] Val Acc: 0.7734625080941429
+[11:52:12,117 INFO] Best Acc: 0.7748629563291308
+[11:54:55,292 INFO] Epoch id: 13, Training steps: 100, Avg loss: 0.413, Acc: 0.804
+[11:54:55,292 INFO] Val set evaluation.
+[11:54:55,293 INFO] Evaluating...
+[11:57:27,795 INFO] Val Acc: 0.7728112996464044
+[11:57:27,812 INFO] Best Acc: 0.7748629563291308
+[11:58:46,492 INFO] Epoch id: 13, Training steps: 200, Avg loss: 0.417, Acc: 0.801
+[11:58:46,493 INFO] Val set evaluation.
+[11:58:46,493 INFO] Evaluating...
+[12:01:16,908 INFO] Val Acc: 0.7716889404914749
+[12:01:16,922 INFO] Best Acc: 0.7748629563291308
+[12:03:58,590 INFO] Epoch id: 14, Training steps: 100, Avg loss: 0.402, Acc: 0.807
+[12:03:58,591 INFO] Val set evaluation.
+[12:03:58,591 INFO] Evaluating...
+[12:06:26,420 INFO] Val Acc: 0.7729953587894708
+[12:06:26,439 INFO] Best Acc: 0.7748629563291308
+[12:07:45,351 INFO] Epoch id: 14, Training steps: 200, Avg loss: 0.402, Acc: 0.807
+[12:07:45,352 INFO] Val set evaluation.
+[12:07:45,352 INFO] Evaluating...
+[12:10:15,338 INFO] Val Acc: 0.7749209748187535
+[12:10:20,944 INFO] Best Acc until now!
+
+[12:10:20,944 INFO] Best Acc: 0.7749209748187535
+[12:13:04,347 INFO] Epoch id: 15, Training steps: 100, Avg loss: 0.396, Acc: 0.810
+[12:13:04,348 INFO] Val set evaluation.
+[12:13:04,348 INFO] Evaluating...
+[12:15:35,023 INFO] Val Acc: 0.7761723753432153
+[12:15:40,713 INFO] Best Acc until now!
+
+[12:15:40,713 INFO] Best Acc: 0.7761723753432153
+[12:16:59,376 INFO] Epoch id: 15, Training steps: 200, Avg loss: 0.393, Acc: 0.810
+[12:16:59,377 INFO] Val set evaluation.
+[12:16:59,377 INFO] Evaluating...
+[12:19:27,611 INFO] Val Acc: 0.7735045214773903
+[12:19:27,641 INFO] Best Acc: 0.7761723753432153

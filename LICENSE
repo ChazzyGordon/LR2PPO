@@ -199,3 +199,21 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+================================================================================
+Third-Party Licenses
+================================================================================
+
+This software includes code, libraries, or components from the following 
+third-party projects, which are licensed under their respective terms:
+
+1. TencentPretrain (Apache 2.0 with third-party exceptions)
+   - Copyright (C) 2021 THL A29 Limited, a Tencent company.
+   - Original License: Apache 2.0 (see licenses/APACHE-2.0-TencentPretrain.txt)
+   - Third-party components: See NOTICE file.
+
+2. PaLM-rlhf-pytorch(MIT License)
+   - Copyright (c) 2022 Phil Wang
+   - Original License: MIT (see licenses/MIT-PhilWang-PaLM-rlhf-pytorch.txt)
+
+Full license texts for third-party components are available in the licenses/ directory.

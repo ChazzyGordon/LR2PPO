@@ -1,0 +1,12 @@
+Multimodal Label Relevance Ranking via Reinforcement Learning
+Copyright 2024 Tencent
+
+This project incorporates components from:
+- TencentPretrain (Apache 2.0 with third-party components)
+  Copyright (C) 2021 THL A29 Limited
+  Source: https://github.com/Tencent/TencentPretrain
+- PaLM-rlhf-pytorch (MIT)
+  Copyright (c) 2022 Phil Wang
+  Source: https://github.com/lucidrains/PaLM-rlhf-pytorch
+
+See the licenses/ directory for full third-party license texts.
