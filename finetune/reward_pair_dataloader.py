@@ -364,42 +364,56 @@ def train_model(args, model,  optimizer, scheduler, text_emb_batch,
 
     return loss, acc
 
-
 def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
     if args.is_master:
         args.logger.info("Evaluating...")
 
     model.eval()
+    total_correct = 0
+    total_samples = 0
 
     if args.is_master:
-        pbar = tqdm(dynamic_ncols=True, leave=True, desc=False)
-    total_size = len(dataloader)
-    total_acc = 0
-    for i, (text_emb, img_emb, tgts, chosen_index, reject_index) in enumerate(dataloader):
-        if args.is_master:
-            pbar.update(1)
-            pbar.set_description(f"Testing | Total Size {total_size}")
-        text_emb_batch = text_emb.to(args.device) 
-        tgts_batch = tgts.to(args.device) 
-        img_emb_batch = img_emb.unsqueeze(1).repeat(
-            1, text_emb_batch.shape[1], 1, 1).to(args.device) 
-        chosen_index_batch = chosen_index.to(args.device)
-        reject_index_batch = reject_index.to(args.device)
+        pbar = tqdm(total=len(dataloader), dynamic_ncols=True, desc="evaluating")
 
-        chosen_score = model(text_emb_batch, img_emb_batch,
-                             tgts_batch, chosen_index_batch)
-        reject_score = model(text_emb_batch, img_emb_batch,
-                             tgts_batch, reject_index_batch)
+    with torch.no_grad():
+        for i, (text_emb, img_emb, tgts, chosen_index, reject_index) in enumerate(dataloader):
+            # prepare batch data
+            text_emb_batch = text_emb.to(args.device)
+            tgts_batch = tgts.to(args.device)
+            img_emb_batch = img_emb.unsqueeze(1).repeat(
+                1, text_emb_batch.shape[1], 1, 1).to(args.device)  # process image embeddings
+            
+            # move indices to device
+            chosen_index_batch = chosen_index.to(args.device)
+            reject_index_batch = reject_index.to(args.device)
 
-        acc = (chosen_score > reject_score).float().mean()
-        dist.all_reduce(acc.div_(dist.get_world_size()))
-        dist.barrier()
+            # model inference
+            chosen_score = model(text_emb_batch, img_emb_batch, tgts_batch, chosen_index_batch)
+            reject_score = model(text_emb_batch, img_emb_batch, tgts_batch, reject_index_batch)
 
-        total_acc += acc.item()
+            # calculate comparison results
+            batch_correct = (chosen_score > reject_score).float().sum()
+            batch_samples = torch.tensor(chosen_score.numel(), device=args.device)  # count all comparisons
+
+            # sync across devices
+            dist.all_reduce(batch_correct, op=dist.ReduceOp.SUM)
+            dist.all_reduce(batch_samples, op=dist.ReduceOp.SUM)
+
+            # update counters
+            total_correct += batch_correct.item()
+            total_samples += batch_samples.item()
+
+            if args.is_master:
+                pbar.update(1)
+
     if args.is_master:
-        args.logger.info(f"Val Acc: {total_acc/total_size}")
+        pbar.close()
+        accuracy = total_correct / total_samples if total_samples > 0 else 0
+        args.logger.info(f"{split} accuracy: {accuracy:.4f}")
+        return accuracy
+    else:
+        return None
 
-    return total_acc/total_size
 
 
 def get_dataloader(args, dataset, num_tasks, global_rank, is_train=False):

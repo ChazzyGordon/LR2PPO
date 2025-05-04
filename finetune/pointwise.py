@@ -352,10 +352,12 @@ def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
             scores, dim=-1, descending=True)
         gold_rearranged = gold[scores_indices]
         true_relevances, true_indices = torch.sort(
-            gold_rearranged, dim=-1, descending=True)
+            gold, dim=-1, descending=True)
 
         ndcg_value_list = ndcg_obj.return_ndcg_at_k(
             gold_rearranged, true_relevances).clone().detach()
+        
+        ndcg_value_list = ndcg_value_list.to(dtype=torch.float32)
 
         gather_ndcg_value_list = [torch.zeros_like(
             ndcg_value_list) for _ in range(num_tasks)]
