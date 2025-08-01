@@ -8,5 +8,9 @@ This project incorporates components from:
 - PaLM-rlhf-pytorch (MIT)
   Copyright (c) 2022 Phil Wang
   Source: https://github.com/lucidrains/PaLM-rlhf-pytorch
+- CatBoost Benchmarks (Apache 2.0)
+  Copyright: 2017-2025 YANDEX LLC
+  File: preprocess.py
+  Source: https://github.com/catboost/benchmarks/blob/master/ranking/preprocess.py
 
 See the licenses/ directory for full third-party license texts.

@@ -506,7 +506,7 @@ def main():
 
     trainset = MovieNet(args, args.train_path, is_train=True)
     valset = MovieNet(args, args.dev_path, is_train=False)
-    # testset = read_dataset(args, vit_args, args.test_path, is_train=False)
+    # testset = MovieNet(args, args.test_path, is_train=False)
 
     train_loader = get_dataloader(
         args, trainset, num_tasks, global_rank, is_train=True)

@@ -29,23 +29,23 @@ from tencentpretrain.model_saver import save_model
 from tencentpretrain.opts import finetune_opts, tokenizer_opts, adv_opts
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
-
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
+import h5py
+import torch.nn.functional as F
+import os
 
 from misc import *
-from torch.utils.data import Dataset, DataLoader
 from project_embedding import ProjectionLayer
 from video_transformer import VideoTransformer
 from xit import XiT
-import h5py
-import torch.nn.functional as F
 
 
 def get_scores(score, mode, use_pair_wise=False):
     if mode == 'cls':
         score = nn.Softmax(dim=-1)(score)
         scores = score[:, 0] * 10 + score[:, 1] * \
-            5 + score[:, 2] * 1 
+            5 + score[:, 2] * 1
         if use_pair_wise:
             scores = score
         else:
@@ -74,97 +74,64 @@ def get_def_cls(tgts_lst):
         return rand_indices
 
 
-class MovieNet(Dataset):
-    def __init__(self, args, path, is_train=False):
-        if args.is_master:
-            print("Loading MovieNet dataset...")
-        with open(path, 'r')as f:
-            self.data = json.load(f)
-        print(len(self.data))
-        self.embed_root = "LRMovieNet"
-        self.embed_data = h5py.File(f"{self.embed_root}/clean_feat.h5", 'r')
-        self.max_imgs = args.max_imgs
+def get_index(tag_list):
+    index = [i for i in range(len(tag_list))]
+    random.shuffle(index)
+    index = index[:2]
+    if tag_list[index[0]]['target'] >= tag_list[index[1]]['target']:
+        return index + index, index + [index[1], index[0]]
+    else:
+        return index + [index[1], index[0]], index + index
+
+
+class LTRDataset(Dataset):
+    def __init__(self, args, path, is_train=False, max_tags=20):
         self.is_train = is_train
-        self.max_tags = args.max_tags
-        self.item_emb_id = []
-        self.item_tag_list = []
-        self.tag_index = []
+        if is_train:
+            path = os.path.join(path, 'train.h5')
+        else:
+            path = os.path.join(path, 'test.h5')
+        self.data = h5py.File(path, 'r')
+        self.dataset = []
 
-        for item in self.data:
-            item_id = item['id']
-            tag_list = item['tags']
-            if self.is_train:
-                tags_num = len(tag_list)
-                if tags_num > self.max_tags:
-                    tag_list = tag_list[:self.max_tags]
-                    tag_index = []
-                    for i in range(self.max_tags):
-                        tag_index.append(i % tags_num)
-                elif tags_num <= self.max_tags:
-                    tag_index = [i for i in range(tags_num)]
+        relevances_classes = 5
+        for query_id in self.data.keys():
+            data = self.data[query_id][()]
+            ground_truths = data[:, 0]
+            features = data[:, 2:]
+            indices_by_label = {i: [] for i in range(relevances_classes)}
+            for i, label in enumerate(ground_truths):
+                indices_by_label[int(label)].append(i)
 
-                    # augmentation
-                    add_list = []
-                    for i in range(tags_num):
-                        if int(tag_list[i]['target']) != 0:
-                            add_list.append(i)
-                    add_num = len(add_list)
-                    if add_num == 0:
-                        for i in range(tags_num, self.max_tags):
-                            tag_list.append(tag_list[i % tags_num])
-                            tag_index.append(i % tags_num)
+            for _ in range(max_tags):
+                sampled_indices = [np.random.choice(indices_by_label[i]) for i in range(relevances_classes) if indices_by_label[i]]
+                if len(sampled_indices) < 2:
+                    continue
+                pair = np.random.choice(sampled_indices, 2, replace=False)
+                if ground_truths[pair[0]] != ground_truths[pair[1]]:
+                    if ground_truths[pair[0]] > ground_truths[pair[1]]:
+                        chosen_indices = [pair[0], pair[1], pair[0], pair[1]]
+                        reject_indices = [pair[0], pair[1], pair[1], pair[0]]
                     else:
-                        for i in range(tags_num, self.max_tags):
-                            tag_list.append(tag_list[add_list[i % add_num]])
-                            tag_index.append(add_list[i % add_num])
-                self.tag_index.append(tag_index)
-                self.item_tag_list.append(tag_list)
-                self.item_emb_id.append(item_id)
-            else:
-                tag_index = [i for i in range(len(tag_list))]
-                self.tag_index.append(tag_index)
-                self.item_tag_list.append(tag_list)
-                self.item_emb_id.append(item_id)
-        if args.is_master:
-            print("Load Embedding Done!")
+                        chosen_indices = [pair[0], pair[1], pair[1], pair[0]]
+                        reject_indices = [pair[0], pair[1], pair[0], pair[1]]
+                    self.dataset.append((ground_truths, query_id, features, chosen_indices, reject_indices))
 
     def __getitem__(self, index):
-        tag_list = self.item_tag_list[index]
-        item_emb_id = self.item_emb_id[index]
-        tag_index = torch.tensor(self.tag_index[index])
-        # text_emb
-        text_emb = torch.tensor(
-            self.embed_data[f'{item_emb_id}']['text_emb'][:]).clone().detach()
-        text_emb = text_emb[tag_index]
+        ground_truths, query_id, features, chosen_indices, reject_indices = self.dataset[index]
 
-        # img
-        img_emb = torch.zeros(self.max_imgs, 768)
-        load_img_emb = torch.tensor(
-            self.embed_data[f'{item_emb_id}']['img_emb'][:][0]).clone().detach()
-        load_image_num = load_img_emb.shape[0]
+        ground_truths = torch.tensor(ground_truths)
+        features = torch.tensor(features)
+        chosen_indices = torch.tensor(chosen_indices)
+        reject_indices = torch.tensor(reject_indices)
 
-        # shuffle
-        load_img_emb = load_img_emb[torch.randperm(load_image_num)]
-
-        if load_image_num > self.max_imgs:
-            img_emb = load_img_emb[:self.max_imgs]
+        if self.is_train:
+            return ground_truths, query_id, features, chosen_indices, reject_indices
         else:
-            img_emb[:load_image_num] = load_img_emb
-            for i in range(load_image_num, self.max_imgs):
-                img_emb[i] = load_img_emb[i % load_image_num]
-
-        tag_nums = len(tag_list)
-        tgts = [None for _ in range(tag_nums)]
-
-        for i, tag_item in enumerate(tag_list):
-            tgt = tag_item["target"]
-            tgts[i] = int(tgt)
-
-        tgt = torch.tensor(tgts)
-        return text_emb, img_emb, tgt
+            return ground_truths, query_id, features, chosen_indices, reject_indices
 
     def __len__(self):
-        return len(self.item_emb_id)
+        return len(self.dataset)
 
 
 class Mlp(nn.Module):
@@ -192,48 +159,46 @@ class Classifier(nn.Module):
         self.mode = args.mode
         self.labels_num = args.labels_num
 
-        self.text_proj = Mlp(768, 768*4, 768, nn.GELU, 0)
-        self.img_proj = Mlp(768, 768*4, 768, nn.GELU, 0)
+        self.pos_emb = nn.Embedding(4, 768)
 
         self.xit = XiT(feat_size=768)
+        self.xitt = XiT(feat_size=768, attention_mask='causal')
 
-        self.out_layer = Mlp((args.seq_length + args.max_imgs) *
-                             args.visual_feat_dim, 768*4, 768, nn.GELU, 0)
-        if self.mode == 'cls':
-            self.head = nn.Linear(768, self.labels_num)
-        elif self.mode == 'reg':
-            self.head = nn.Linear(768, 1)
+        self.out_layer = Mlp((1+1)*768, 768*4, 768, nn.GELU, 0)
 
-    def forward(self, text_emb, img_emb, tgts):
-        text_feature = self.text_proj(text_emb) 
-        img_feature = self.img_proj(img_emb)
+        self.head = nn.Linear(768, 1)
+
+    def forward(self, text_emb, img_emb, tgts, index):
+        # rearranged by index
+        bs, tags_num = text_emb.shape[:2]
+        batch_index = torch.arange(bs).view(bs, 1).cuda()
+        text_emb = text_emb[batch_index, index]
+        tgts = tgts[batch_index, index]
+
+        text_emb = text_emb.to(torch.float32)
+        text_feature = text_emb.unsqueeze(2)
 
         bs, tags_num = text_feature.shape[:2]
         text_feature = text_feature.view(
-            bs*tags_num, 196, 768) 
-        img_feature = img_feature.view(bs*tags_num, -1, 768)
+            bs*tags_num, 1, 768)
 
-        x = self.xit((text_feature, img_feature)) 
-        x = torch.cat([x, img_feature], dim=1)
+        x = self.xit((text_feature, text_feature))  # cross attention
+        x = torch.cat([x, text_feature], dim=1)
         x = self.out_layer(x.view(x.shape[0], -1))
 
-        x = x.view(bs, tags_num, 768) 
-        logits = self.head(x) 
-        if self.mode =='cls':
-            logits = logits.view(-1, self.labels_num)
-        else:
-            logits = logits.view(-1, 1)
-        if self.mode == 'reg':
-            if tgts is None:
-                return logits
-            loss = nn.SmoothL1Loss(beta=0.3)(logits.view(-1), tgts.view(-1))
-            return loss, logits
+        x = x.view(bs, tags_num, 768)
+        pos_emb = self.pos_emb(torch.arange(0, 4, dtype=torch.long).cuda()
+                               .unsqueeze(0)
+                               .repeat(bs, 1))
+        x = x + pos_emb
+        x = self.xitt((x, x))
 
-        if tgts is not None:
-            loss = nn.NLLLoss()(nn.LogSoftmax(dim=-1)(logits), tgts.view(-1))
-            return loss, logits
-        else:
-            return logits
+        x = x.view(bs, tags_num, 768)
+        logits = self.head(x)
+        logits = logits[:, -1]
+        logits = logits.view(bs)
+
+        return logits
 
 
 def load_or_initialize_parameters(args, model):
@@ -298,118 +263,68 @@ def build_optimizer(args, model):
 
 
 def train_model(args, model,  optimizer, scheduler, text_emb_batch,
-                img_emb_batch, tgts_batch):
+                img_emb_batch, tgts_batch, chosen_index_batch, reject_index_batch):
+    batch_size = text_emb_batch.shape[0]
     model.zero_grad()
-    loss, _ = model(text_emb_batch, img_emb_batch, tgts_batch)
-
-    if torch.cuda.device_count() > 1:
-        loss = torch.mean(loss)
+    chosen_score = model(text_emb_batch, img_emb_batch,
+                         tgts_batch, chosen_index_batch)
+    reject_score = model(text_emb_batch, img_emb_batch,
+                         tgts_batch, reject_index_batch)
+    loss_1 = torch.relu(0.01-(chosen_score-reject_score)).mean()
+    loss = loss_1
+    acc = (chosen_score > reject_score).float().mean()
 
     loss.backward()
 
     optimizer.step()
     scheduler.step()
 
-    return loss
-
+    return loss, acc
 
 def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
     if args.is_master:
         args.logger.info("Evaluating...")
 
-    batch_size = args.batch_size
-    ndcg_obj = AverageNDCGMeter()
-    total_acc_list = []
-    total_cnt_list = []
-
     model.eval()
+    total_correct = 0
+    total_samples = 0
 
     if args.is_master:
-        pbar = tqdm(dynamic_ncols=True, leave=True, desc=False)
-    total_size = len(dataloader)
-    batch_size = args.batch_size
-    for i, (text_emb, img_emb, tgts) in enumerate(dataloader):
-        if args.is_master:
-            pbar.update(1)
-            pbar.set_description(f"Testing | Total Size {total_size}")
-        text_emb_batch = text_emb.to(args.device) 
-        tgts_batch = tgts.to(args.device) 
-        img_emb_batch = img_emb.unsqueeze(1).repeat(
-            1, text_emb_batch.shape[1], 1, 1).to(args.device)
+        pbar = tqdm(total=len(dataloader), dynamic_ncols=True, desc="Evaluating")
 
-        with torch.no_grad():
-            logits = model(text_emb_batch, img_emb_batch, None)
-        if args.mode == 'cls':
-            logits = logits.view(-1, 3)
-            pred = torch.argmax(logits, -1)
-            scores = logits[:, 0] * 0 + logits[:, 1] * 1 + logits[:, 2] * 2
-        else:
-            scores = logits.view(-1)
+    with torch.no_grad():
+        for i, (ground_truths, query_id, features, chosen_index, reject_index) in enumerate(dataloader):
+            text_emb = features.to(args.device)
+            chosen_index_batch = chosen_index.to(args.device)
+            reject_index_batch = reject_index.to(args.device)
+            tgts = ground_truths.to(args.device)
 
-        gold = tgts_batch.view(-1)
+            # model inference
+            chosen_score = model(text_emb, None, tgts, chosen_index_batch)
+            reject_score = model(text_emb, None, tgts, reject_index_batch)
 
-        scores_sorted, scores_indices = torch.sort(
-            scores, dim=-1, descending=True)
-        gold_rearranged = gold[scores_indices]
-        true_relevances, true_indices = torch.sort(
-            gold, dim=-1, descending=True)
+            # calculate correct samples in current batch (keep as tensor)
+            batch_correct = (chosen_score > reject_score).float().sum()
+            batch_samples = torch.tensor(chosen_score.size(0), device=args.device)  # convert to tensor
 
-        ndcg_value_list = ndcg_obj.return_ndcg_at_k(
-            gold_rearranged, true_relevances).clone().detach()
-        
-        ndcg_value_list = ndcg_value_list.to(dtype=torch.float32)
+            # distributed aggregation
+            dist.all_reduce(batch_correct, op=dist.ReduceOp.SUM)
+            dist.all_reduce(batch_samples, op=dist.ReduceOp.SUM)
 
-        gather_ndcg_value_list = [torch.zeros_like(
-            ndcg_value_list) for _ in range(num_tasks)]
-        torch.distributed.all_gather(gather_ndcg_value_list, ndcg_value_list)
+            # accumulate global stats
+            total_correct += batch_correct.item()
+            total_samples += batch_samples.item()
 
-        if args.mode == 'cls':
-            acc_list = []
-            cnt_list = []
-            for i in range(3):
-                acc_list.append(torch.sum((pred == gold).float()
-                                [gold == i]).clone().detach())
-                cnt_list.append(torch.sum((gold == i).float()).clone().detach())
-            acc_list = torch.stack(acc_list)
-            cnt_list = torch.stack(cnt_list)
-            gather_acc_list = [torch.zeros_like(
-                acc_list) for _ in range(num_tasks)]
-            torch.distributed.all_gather(gather_acc_list, acc_list)
-            gather_cnt_list = [torch.zeros_like(
-                cnt_list) for _ in range(num_tasks)]
-            torch.distributed.all_gather(gather_cnt_list, cnt_list)
-
-        if args.is_master:
-            for ndcg_value_list in gather_ndcg_value_list:
-                for i, k_val in enumerate(ndcg_obj.ndcg_at_k):
-                    ndcg_obj.ndcg[k_val].append(ndcg_value_list[i])
-
-            if args.mode == 'cls':
-                total_acc_list += gather_acc_list
-                total_cnt_list += gather_cnt_list
+            if args.is_master:
+                pbar.update(1)
 
     if args.is_master:
-        if args.mode == 'cls':
-            mean_acc = torch.sum(torch.stack(total_acc_list)) / \
-                torch.sum(torch.stack(total_cnt_list))
-            acc = torch.sum(torch.stack(total_acc_list), dim=0) / \
-                torch.sum(torch.stack(total_cnt_list), dim=0)
-            args.logger.info(f"Acc: {mean_acc}")
-            for i in range(3):
-                args.logger.info(f"Label {i} Acc: {acc[i].item()}")
-        else:
-            mean_acc = 0
-
-        ndcg_value = ndcg_obj.value()
-        args.logger.info("NDCG:")
-        ndcg_str = ""
-        for k in sorted(ndcg_value.keys()):
-            ndcg_str += "\nNDCG@{}={:.4f}".format(k, ndcg_value[k])
-        args.logger.info(ndcg_str)
-
-        return ndcg_value[100000000], mean_acc
+        pbar.close()
+        accuracy = total_correct / total_samples if total_samples > 0 else 0
+        args.logger.info(f"Val Acc: {accuracy:.4f}")
+        return accuracy
     else:
-        return None, None
+        return None
 
 
 def get_dataloader(args, dataset, num_tasks, global_rank, is_train=False):
@@ -426,7 +341,7 @@ def get_dataloader(args, dataset, num_tasks, global_rank, is_train=False):
                                      rank=global_rank,
                                      shuffle=False)
         dataloader = DataLoader(
-            dataset=dataset, batch_size=1, sampler=sampler, num_workers=32, drop_last=False)
+            dataset=dataset, batch_size=args.batch_size, sampler=sampler, num_workers=32, drop_last=False)
     return dataloader
 
 
@@ -500,9 +415,9 @@ def main():
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(args.device)
 
-    trainset = MovieNet(args, args.train_path, is_train=True)
-    valset = MovieNet(args, args.dev_path, is_train=False)
-    # testset = MovieNet(args, args.test_path, is_train=False)
+    trainset = LTRDataset(args, args.train_path, is_train=True)
+    valset = LTRDataset(args, args.dev_path, is_train=False)
+    # testset = LTRDataset(args, args.test_path, is_train=False)
 
     train_loader = get_dataloader(
         args, trainset, num_tasks, global_rank, is_train=True)
@@ -525,7 +440,9 @@ def main():
 
     args.model = model
 
-    total_loss, result, best_result = 0.0, 0.0, 0.0
+    total_loss, result, best_acc = 0.0, 0.0, 0.0
+    total_acc = 0
+    total_cnt = 0
 
     if args.is_master:
         args.logger.info("Start training.")
@@ -539,47 +456,48 @@ def main():
         if args.is_master:
             pbar = tqdm(dynamic_ncols=True, leave=True, desc=False)
             train_size = len(train_loader)
-        for i, (text_emb, img_emb, tgts) in enumerate(train_loader):
-            text_emb_batch = text_emb.to(args.device) 
-            img_emb_batch = img_emb.unsqueeze(1).repeat(1, text_emb_batch.shape[1], 1, 1).to(
-                args.device) 
+        for i, (ground_truths, query_id, features, chosen_index, reject_index) in enumerate(train_loader):
+            text_emb, _, tgts = features, None, ground_truths
+            text_emb_batch = text_emb.to(args.device)
             tgts_batch = tgts.to(args.device)
+            chosen_index_batch = chosen_index.to(args.device)
+            reject_index_batch = reject_index.to(args.device)
             if args.is_master:
                 log_dict = {}
                 pbar.update(1)
                 pbar.set_description(
                     f"Epoch {epoch} | Training | Total Size {train_size}")
 
-            loss = train_model(args, model, optimizer,
-                               scheduler, text_emb_batch, img_emb_batch, tgts_batch)
+            loss, acc = train_model(args, model, optimizer,
+                                    scheduler, text_emb_batch, None, tgts_batch, chosen_index_batch, reject_index_batch)
             dist.all_reduce(loss.div_(dist.get_world_size()))
+            dist.all_reduce(acc.div_(dist.get_world_size()))
 
             total_loss += loss.item()
+            total_acc += acc.item()
+            total_cnt += 1
 
             step += 1
             if (i + 1) % args.report_steps == 0:
-                torch.distributed.barrier()
                 if args.is_master:
-                    args.logger.info("Epoch id: {}, Training steps: {}, Avg loss: {:.3f}".format(
-                        epoch, i + 1, total_loss / args.report_steps))
+                    args.logger.info("Epoch id: {}, Training steps: {}, Avg loss: {:.3f}, Acc: {:.3f}".format(
+                        epoch, i + 1, total_loss / total_cnt, total_acc / total_cnt))
                     args.logger.info("Val set evaluation.")
-                    log_dict.update({"loss": total_loss / args.report_steps})
+                    log_dict.update(
+                        {"loss": total_loss / total_cnt, "acc": total_acc / total_cnt})
 
                 total_loss = 0.0
-                result, acc = evaluate(args, model, val_loader,
-                                       step, split="val", num_tasks=num_tasks)
+                total_acc = 0.0
+                total_cnt = 0
+                acc = evaluate(args, model, val_loader,
+                               step, split="val", num_tasks=num_tasks)
                 if args.is_master:
-                    log_dict.update({"NDCG": result.item(), "Acc": acc})
-                    if result.item() > best_result:
-                        best_result = result.item()
+                    log_dict.update({"Val Acc": acc})
+                    if acc > best_acc:
+                        best_acc = acc
                         save_model(model, args.output_model_path)
-                        args.logger.info("Best NDCG until now!\n")
-                    args.logger.info("Best NDCG: {}".format(best_result))
-
-                # Evaluation phase.
-                # if args.test_path is not None:
-                    # args.logger.info("Test set evaluation.")
-                    # evaluate(args, testset, step, split="test")
+                        args.logger.info("Best Acc until now!\n")
+                    args.logger.info("Best Acc: {}".format(best_acc))
 
                 model.train()
 

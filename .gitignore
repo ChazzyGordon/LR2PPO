@@ -15,6 +15,18 @@
 /ppo_eval_logs/
 /case/
 
+/traditional/
+/*.zip
+/datasets_trad/trad_datasets/
+
+/pointwise_ckpt_trad/
+/pointwise_logs_trad/
+/reward_ckpt_trad/
+/reward_logs_trad/
+/ppo_ckpt_trad/
+/ppo_logs_trad/
+/ppo_eval_logs_trad/
+/ppo_eval_ckpt_trad/
 
 # -------------------------General--------------------------------
 

@@ -5,6 +5,12 @@ import argparse
 import torch
 import torch.nn as nn
 from tqdm import tqdm
+import torch
+from torch.utils.data import Dataset
+import pandas as pd
+import os
+import h5py
+from torch.utils.data import Dataset
 
 tencentpretrain_dir = os.path.abspath(
     os.path.join(os.path.dirname(__file__), ".."))
@@ -40,12 +46,17 @@ from xit import XiT
 import h5py
 import torch.nn.functional as F
 
+import torch
+import csv
+from pathlib import Path
+from torch.utils.data.sampler import SequentialSampler
+
 
 def get_scores(score, mode, use_pair_wise=False):
     if mode == 'cls':
         score = nn.Softmax(dim=-1)(score)
         scores = score[:, 0] * 10 + score[:, 1] * \
-            5 + score[:, 2] * 1 
+            5 + score[:, 2] * 1
         if use_pair_wise:
             scores = score
         else:
@@ -74,98 +85,29 @@ def get_def_cls(tgts_lst):
         return rand_indices
 
 
-class MovieNet(Dataset):
+class LTRDataset(Dataset):
     def __init__(self, args, path, is_train=False):
-        if args.is_master:
-            print("Loading MovieNet dataset...")
-        with open(path, 'r')as f:
-            self.data = json.load(f)
-        print(len(self.data))
-        self.embed_root = "LRMovieNet"
-        self.embed_data = h5py.File(f"{self.embed_root}/clean_feat.h5", 'r')
-        self.max_imgs = args.max_imgs
         self.is_train = is_train
-        self.max_tags = args.max_tags
-        self.item_emb_id = []
-        self.item_tag_list = []
-        self.tag_index = []
-
-        for item in self.data:
-            item_id = item['id']
-            tag_list = item['tags']
-            if self.is_train:
-                tags_num = len(tag_list)
-                if tags_num > self.max_tags:
-                    tag_list = tag_list[:self.max_tags]
-                    tag_index = []
-                    for i in range(self.max_tags):
-                        tag_index.append(i % tags_num)
-                elif tags_num <= self.max_tags:
-                    tag_index = [i for i in range(tags_num)]
-
-                    # augmentation
-                    add_list = []
-                    for i in range(tags_num):
-                        if int(tag_list[i]['target']) != 0:
-                            add_list.append(i)
-                    add_num = len(add_list)
-                    if add_num == 0:
-                        for i in range(tags_num, self.max_tags):
-                            tag_list.append(tag_list[i % tags_num])
-                            tag_index.append(i % tags_num)
-                    else:
-                        for i in range(tags_num, self.max_tags):
-                            tag_list.append(tag_list[add_list[i % add_num]])
-                            tag_index.append(add_list[i % add_num])
-                self.tag_index.append(tag_index)
-                self.item_tag_list.append(tag_list)
-                self.item_emb_id.append(item_id)
-            else:
-                tag_index = [i for i in range(len(tag_list))]
-                self.tag_index.append(tag_index)
-                self.item_tag_list.append(tag_list)
-                self.item_emb_id.append(item_id)
-        if args.is_master:
-            print("Load Embedding Done!")
+        if is_train:
+            path = os.path.join(path, 'train.h5')
+        else:
+            path = os.path.join(path, 'test.h5')
+        self.data = h5py.File(path, 'r')
+        print("LTRDataset len(self.data)")
+        print(len(self.data))
 
     def __getitem__(self, index):
-        tag_list = self.item_tag_list[index]
-        item_emb_id = self.item_emb_id[index]
-        tag_index = torch.tensor(self.tag_index[index])
-        # text_emb
-        text_emb = torch.tensor(
-            self.embed_data[f'{item_emb_id}']['text_emb'][:]).clone().detach()
-        text_emb = text_emb[tag_index]
-
-        # img
-        img_emb = torch.zeros(self.max_imgs, 768)
-        load_img_emb = torch.tensor(
-            self.embed_data[f'{item_emb_id}']['img_emb'][:][0]).clone().detach()
-        load_image_num = load_img_emb.shape[0]
-
-        # shuffle
-        load_img_emb = load_img_emb[torch.randperm(load_image_num)]
-
-        if load_image_num > self.max_imgs:
-            img_emb = load_img_emb[:self.max_imgs]
+        query_id = list(self.data.keys())[index]
+        data = self.data[query_id][()]
+        ground_truths = data[:, 0]
+        features = data[:, 2:]
+        if self.is_train:
+            return ground_truths, query_id, features
         else:
-            img_emb[:load_image_num] = load_img_emb
-            for i in range(load_image_num, self.max_imgs):
-                img_emb[i] = load_img_emb[i % load_image_num]
-
-        tag_nums = len(tag_list)
-        tgts = [None for _ in range(tag_nums)]
-
-        for i, tag_item in enumerate(tag_list):
-            tgt = tag_item["target"]
-            tgts[i] = int(tgt)
-
-        tgt = torch.tensor(tgts)
-        return text_emb, img_emb, tgt
+            return ground_truths, query_id, features
 
     def __len__(self):
-        return len(self.item_emb_id)
-
+        return len(self.data)
 
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -178,6 +120,7 @@ class Mlp(nn.Module):
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
+        x = x.to(self.fc1.weight.dtype)
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop(x)
@@ -192,33 +135,30 @@ class Classifier(nn.Module):
         self.mode = args.mode
         self.labels_num = args.labels_num
 
-        self.text_proj = Mlp(768, 768*4, 768, nn.GELU, 0)
-        self.img_proj = Mlp(768, 768*4, 768, nn.GELU, 0)
-
         self.xit = XiT(feat_size=768)
 
-        self.out_layer = Mlp((args.seq_length + args.max_imgs) *
-                             args.visual_feat_dim, 768*4, 768, nn.GELU, 0)
+        self.out_layer = Mlp((1+1)*768, 768*4, 768, nn.GELU, 0)
         if self.mode == 'cls':
             self.head = nn.Linear(768, self.labels_num)
         elif self.mode == 'reg':
             self.head = nn.Linear(768, 1)
 
     def forward(self, text_emb, img_emb, tgts):
-        text_feature = self.text_proj(text_emb) 
-        img_feature = self.img_proj(img_emb)
+        text_emb = text_emb.to(torch.float32)
+        text_feature = text_emb.unsqueeze(2)
 
         bs, tags_num = text_feature.shape[:2]
-        text_feature = text_feature.view(
-            bs*tags_num, 196, 768) 
-        img_feature = img_feature.view(bs*tags_num, -1, 768)
+        try:
+            text_feature = text_feature.view(bs*tags_num, 1, 768)
+        except:
+            import pdb; pdb.set_trace()
 
-        x = self.xit((text_feature, img_feature)) 
-        x = torch.cat([x, img_feature], dim=1)
+        x = self.xit((text_feature, text_feature))  # cross attention
+        x = torch.cat([x, text_feature], dim=1)
         x = self.out_layer(x.view(x.shape[0], -1))
 
-        x = x.view(bs, tags_num, 768) 
-        logits = self.head(x) 
+        x = x.view(bs, tags_num, 768)
+        logits = self.head(x)
         if self.mode =='cls':
             logits = logits.view(-1, self.labels_num)
         else:
@@ -272,7 +212,7 @@ def load_or_initialize_parameters(args, model):
 
 
 def build_optimizer(args, model):
-    param_optimizer = list(model.named_parameters())
+    param_optimizer = list(model.module.named_parameters()) if hasattr(model, "module") else list(model.named_parameters())
     no_decay = ["bias", "gamma", "beta"]
     optimizer_grouped_parameters = [
         {"params": [p for n, p in param_optimizer if not any(
@@ -303,6 +243,8 @@ def train_model(args, model,  optimizer, scheduler, text_emb_batch,
     loss, _ = model(text_emb_batch, img_emb_batch, tgts_batch)
 
     if torch.cuda.device_count() > 1:
+        loss = loss.mean()
+    else:
         loss = torch.mean(loss)
 
     loss.backward()
@@ -311,7 +253,6 @@ def train_model(args, model,  optimizer, scheduler, text_emb_batch,
     scheduler.step()
 
     return loss
-
 
 def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
     if args.is_master:
@@ -328,17 +269,15 @@ def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
         pbar = tqdm(dynamic_ncols=True, leave=True, desc=False)
     total_size = len(dataloader)
     batch_size = args.batch_size
-    for i, (text_emb, img_emb, tgts) in enumerate(dataloader):
+    for i, (ground_truths, query_id, features) in enumerate(dataloader):
+        text_emb, _, tgts = features, None, ground_truths
         if args.is_master:
             pbar.update(1)
             pbar.set_description(f"Testing | Total Size {total_size}")
-        text_emb_batch = text_emb.to(args.device) 
-        tgts_batch = tgts.to(args.device) 
-        img_emb_batch = img_emb.unsqueeze(1).repeat(
-            1, text_emb_batch.shape[1], 1, 1).to(args.device)
-
+        text_emb_batch = text_emb.to(args.device)
+        tgts_batch = tgts.to(args.device)
         with torch.no_grad():
-            logits = model(text_emb_batch, img_emb_batch, None)
+            logits = model(text_emb_batch, None, None)
         if args.mode == 'cls':
             logits = logits.view(-1, 3)
             pred = torch.argmax(logits, -1)
@@ -356,11 +295,14 @@ def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
 
         ndcg_value_list = ndcg_obj.return_ndcg_at_k(
             gold_rearranged, true_relevances).clone().detach()
-        
+
         ndcg_value_list = ndcg_value_list.to(dtype=torch.float32)
 
         gather_ndcg_value_list = [torch.zeros_like(
             ndcg_value_list) for _ in range(num_tasks)]
+
+        torch.distributed.barrier()
+        
         torch.distributed.all_gather(gather_ndcg_value_list, ndcg_value_list)
 
         if args.mode == 'cls':
@@ -374,9 +316,11 @@ def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
             cnt_list = torch.stack(cnt_list)
             gather_acc_list = [torch.zeros_like(
                 acc_list) for _ in range(num_tasks)]
+            torch.distributed.barrier()
             torch.distributed.all_gather(gather_acc_list, acc_list)
             gather_cnt_list = [torch.zeros_like(
                 cnt_list) for _ in range(num_tasks)]
+            torch.distributed.barrier()
             torch.distributed.all_gather(gather_cnt_list, cnt_list)
 
         if args.is_master:
@@ -388,6 +332,7 @@ def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
                 total_acc_list += gather_acc_list
                 total_cnt_list += gather_cnt_list
 
+    torch.distributed.barrier()
     if args.is_master:
         if args.mode == 'cls':
             mean_acc = torch.sum(torch.stack(total_acc_list)) / \
@@ -411,7 +356,6 @@ def evaluate(args, model, dataloader, step, split="test", num_tasks=None):
     else:
         return None, None
 
-
 def get_dataloader(args, dataset, num_tasks, global_rank, is_train=False):
     if is_train:
         sampler = DistributedSampler(dataset,
@@ -419,7 +363,7 @@ def get_dataloader(args, dataset, num_tasks, global_rank, is_train=False):
                                      rank=global_rank,
                                      shuffle=True)
         dataloader = DataLoader(
-            dataset=dataset, batch_size=args.batch_size, sampler=sampler, num_workers=32, drop_last=False)
+            dataset=dataset, batch_size=args.batch_size, sampler=sampler, num_workers=32, drop_last=True)
     else:
         sampler = DistributedSampler(dataset,
                                      num_replicas=num_tasks,
@@ -428,7 +372,6 @@ def get_dataloader(args, dataset, num_tasks, global_rank, is_train=False):
         dataloader = DataLoader(
             dataset=dataset, batch_size=1, sampler=sampler, num_workers=32, drop_last=False)
     return dataloader
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -499,17 +442,24 @@ def main():
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(args.device)
+    
+    if torch.cuda.device_count() > 1:
+        print("Using", torch.cuda.device_count(), "GPUs!")
+        model = nn.parallel.DistributedDataParallel(model, device_ids=[args.device])
 
-    trainset = MovieNet(args, args.train_path, is_train=True)
-    valset = MovieNet(args, args.dev_path, is_train=False)
-    # testset = MovieNet(args, args.test_path, is_train=False)
+    trainset = LTRDataset(args, args.train_path, is_train=True)
+    valset = LTRDataset(args, args.dev_path, is_train=False)
+    # testset = LTRDataset(args, args.test_path, is_train=False)
 
-    train_loader = get_dataloader(
+    train_loader3 = get_dataloader(
         args, trainset, num_tasks, global_rank, is_train=True)
     val_loader = get_dataloader(
         args, valset, num_tasks, global_rank, is_train=False)
     # test_loader = get_dataloader(
     #     args, testset, num_tasks, global_rank, is_train=False)
+
+    print('dataset len:')
+    print(len(trainset))
 
     instances_num = len(trainset)
     batch_size = args.batch_size
@@ -532,56 +482,60 @@ def main():
     step = 0
     batch_size = args.batch_size
     for epoch in range(1, args.epochs_num + 1):
-        train_loader.sampler.set_epoch(epoch)
+        train_loader3.sampler.set_epoch(epoch)
 
         model.train()
 
         if args.is_master:
             pbar = tqdm(dynamic_ncols=True, leave=True, desc=False)
-            train_size = len(train_loader)
-        for i, (text_emb, img_emb, tgts) in enumerate(train_loader):
-            text_emb_batch = text_emb.to(args.device) 
-            img_emb_batch = img_emb.unsqueeze(1).repeat(1, text_emb_batch.shape[1], 1, 1).to(
-                args.device) 
-            tgts_batch = tgts.to(args.device)
-            if args.is_master:
-                log_dict = {}
-                pbar.update(1)
-                pbar.set_description(
-                    f"Epoch {epoch} | Training | Total Size {train_size}")
-
-            loss = train_model(args, model, optimizer,
-                               scheduler, text_emb_batch, img_emb_batch, tgts_batch)
-            dist.all_reduce(loss.div_(dist.get_world_size()))
-
-            total_loss += loss.item()
-
-            step += 1
-            if (i + 1) % args.report_steps == 0:
-                torch.distributed.barrier()
+            train_size = len(train_loader3)
+        for i, (ground_truths, query_id, features) in enumerate(train_loader3):
+            if True:
+                text_emb, img_emb, tgts = features, None, ground_truths
+                text_emb_batch = text_emb.to(args.device)
+                tgts_batch = tgts.to(args.device)
                 if args.is_master:
-                    args.logger.info("Epoch id: {}, Training steps: {}, Avg loss: {:.3f}".format(
-                        epoch, i + 1, total_loss / args.report_steps))
-                    args.logger.info("Val set evaluation.")
-                    log_dict.update({"loss": total_loss / args.report_steps})
+                    log_dict = {}
+                    pbar.update(1)
+                    pbar.set_description(
+                        f"Epoch {epoch} | Training | Total Size {train_size}")
 
-                total_loss = 0.0
-                result, acc = evaluate(args, model, val_loader,
-                                       step, split="val", num_tasks=num_tasks)
-                if args.is_master:
-                    log_dict.update({"NDCG": result.item(), "Acc": acc})
-                    if result.item() > best_result:
-                        best_result = result.item()
-                        save_model(model, args.output_model_path)
-                        args.logger.info("Best NDCG until now!\n")
-                    args.logger.info("Best NDCG: {}".format(best_result))
+                loss = train_model(args, model, optimizer,
+                                scheduler, text_emb_batch, None, tgts_batch)
+                dist.all_reduce(loss.div_(dist.get_world_size()))
 
-                # Evaluation phase.
-                # if args.test_path is not None:
-                    # args.logger.info("Test set evaluation.")
-                    # evaluate(args, testset, step, split="test")
+                total_loss += loss.item()
 
-                model.train()
+                step += 1
+                if (i + 1) % args.report_steps == 0:
+                    torch.distributed.barrier()
+                    if args.is_master:
+                        args.logger.info("Epoch id: {}, Training steps: {}, Avg loss: {:.3f}".format(
+                            epoch, i + 1, total_loss / args.report_steps))
+                        args.logger.info("Val set evaluation.")
+                        log_dict.update({"loss": total_loss / args.report_steps})
+
+                    torch.cuda.empty_cache()
+                    torch.distributed.barrier()
+                    total_loss = 0.0
+                    result, acc = evaluate(args, model, val_loader,
+                                            step, split="val", num_tasks=num_tasks)
+                    torch.distributed.barrier()
+                    
+                    if args.is_master:
+                        log_dict.update({"NDCG": result.item(), "Acc": acc})
+                        if result.item() > best_result:
+                            best_result = result.item()
+                            save_model(model.module, args.output_model_path) if hasattr(model, "module") else save_model(model, args.output_model_path)
+                            args.logger.info("Best NDCG until now!\n")
+                        args.logger.info("Best NDCG: {}".format(best_result))
+
+                    # Evaluation phase.
+                    # if args.test_path is not None:
+                        # args.logger.info("Test set evaluation.")
+                        # evaluate(args, testset, step, split="test")
+
+                    model.train()
 
 
 if __name__ == "__main__":

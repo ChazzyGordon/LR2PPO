@@ -134,7 +134,7 @@ def finetune_opts(parser):
                         help="Path of the output model.")
     parser.add_argument("--train_path", type=str, required=False,
                         help="Path of the trainset.")
-    parser.add_argument("--dev_path", type=str, required=True,
+    parser.add_argument("--dev_path", type=str, required=False,
                         help="Path of the devset.")
     parser.add_argument("--test_path", default=None, type=str,
                         help="Path of the testset.")
