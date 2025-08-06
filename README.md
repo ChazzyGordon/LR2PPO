@@ -11,7 +11,7 @@ Introduction video: [YouTube](https://www.youtube.com/watch?v=8I3N-XpGBNI)
 #### For MSLR-Web10K → MQ2008 Transfer Task
 - Pre-processed datasets (`datasets_trad`) available: [Google Drive](https://drive.google.com/drive/folders/18rU9fORPvQNdBMd1rfZa-OnZbWn7dSSF)  
 - *Optional preparation*:  
-  - Follow dataset generation guide: [`datasets_trad/README_TRADDATA.md`](./datasets_trad/README_TRADDATA.md)  
+  - Follow dataset generation guide: [`datasets_trad/README.md`](./datasets_trad/README.md)  
   - Access source datasets:  
     • MSLR-Web10K: [Microsoft Research](https://www.microsoft.com/en-us/research/project/mslr/)  
     • MQ2008: [LETOR 4.0](https://www.microsoft.com/en-us/research/project/letor-learning-rank-information-retrieval/letor-4-0/)  
